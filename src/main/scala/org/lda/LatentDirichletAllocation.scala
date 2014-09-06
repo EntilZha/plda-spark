@@ -4,6 +4,7 @@ import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.SparkContext._
 import org.apache.spark.rdd.RDD
 import breeze.linalg._
+import scala.collection.mutable.ListBuffer
 import scala.util.Random
 import org.apache.log4j.{Level, Logger}
 import scala.io.Source
@@ -15,11 +16,11 @@ object LatentDirichletAllocation {
   val SPARK_HOME = "/root/spark"
   val JAR_FILE = "target/scala-2.10/org/lda-assembly-1.0.jar"
   val MASTER = "local"
-  val FILE = "/Users/pedro/Documents/Code/plda-spark/data/test.txt"
+  val FILE = "/Users/pedro/Documents/Code/plda-spark/data/science.txt"
   //val MASTER = Source.fromFile("/root/spark-ec2/cluster-url").mkString.trim
   //val FILE = "/root/lda/data/data" + data_file_size.toString + "MB.txt"
   val ITERATIONS = 10
-  val K = 2
+  val K = 4
 }
 
 class LatentDirichletAllocation() extends Serializable {
@@ -30,24 +31,27 @@ class LatentDirichletAllocation() extends Serializable {
     }
     return vocab_lookup
   }
-  def print_document_with_assignments(vocab:Array[String],
-                                      doc_words:Array[(Int, Seq[WordTopic])]) {
-    println("Final results of LDA")
-    printf("Iterations: %s, Topics: %s, Vocab: %s\n",
-      LatentDirichletAllocation.ITERATIONS.toString(),
-      LatentDirichletAllocation.K.toString(),
-      vocab.size.toString())
-    for (i <- 0 until vocab.length) {
-      printf("%s : %s\n", vocab(i), i.toString())
-    }
-    println("Documents with assigned words and topic mixture")
-    for (e <- doc_words) {
-      printf("Document ID: %s\n", e._1.toString())
-      for (wt <- e._2) {
-        printf("%s : %s\n", vocab(wt.word), wt.topic)
+
+  // Compute a matrix holding the topic mixture for each document
+  def compute_topic_mixture(vocab:Array[String], docs:Array[(Int, Seq[WordTopic])]) : List[DenseVector[Int]] = {
+    val results = ListBuffer[DenseVector[Int]]()
+    for (doc <- docs) {
+      val v = DenseVector.zeros[Int](LatentDirichletAllocation.K)
+      for (wt <- doc._2) {
+        v(wt.topic) += 1
       }
+      results.append(v)
     }
+    return results.toList
   }
+
+  // Compute a matrix holding the top n words for each topic
+  def compute_top_words(vocab:Array[String], doc_words:Array[(Int, Seq[WordTopic])], n:Int=10) : List[DenseVector[Int]] = {
+    val results = ListBuffer
+    return null
+  }
+
+
   def run(data_file_size: Int, tasks: Int) {
     val K = LatentDirichletAllocation.K
     Logger.getLogger("spark").setLevel(Level.WARN)
@@ -66,8 +70,7 @@ class LatentDirichletAllocation() extends Serializable {
     val V = vocab_lookup.value.size
 
     //Parse individual documents into (d0, List[WordTopic(word, random topic)])
-
-    var grouped_documents_with_wt = data.flatMap({ (line) =>
+    var grouped_documents_with_wt = data.flatMap({(line) =>
       val words = line.split(" ")
       words.map(w => {
         (line.hashCode(), new WordTopic(vocab_lookup.value(w), Random.nextInt(K)))
@@ -76,14 +79,12 @@ class LatentDirichletAllocation() extends Serializable {
     //BEGIN LOOP HERE
     for (x <- 1 to LatentDirichletAllocation.ITERATIONS)
     {
-      val l_K = K
-      val l_V = V
       val c_word = grouped_documents_with_wt.flatMap(kv => {
         kv._2.map(wt => {
           (wt.word, wt.topic)
         })
       }).groupByKey().mapPartitions(partition => {
-        val v = DenseVector.zeros[Int](l_K)
+        val v = DenseVector.zeros[Int](K)
         partition.map(kv => {
           v :*= 0
           kv._2.foreach(t => {
@@ -92,7 +93,7 @@ class LatentDirichletAllocation() extends Serializable {
           (kv._1, v)
         })
       }).mapPartitions(partition => {
-        val m = DenseMatrix.zeros[Int](l_V, l_K)
+        val m = DenseMatrix.zeros[Int](V, K)
         partition.foreach(kv => {
           val key = kv._1
           val v = kv._2
@@ -101,12 +102,12 @@ class LatentDirichletAllocation() extends Serializable {
         Array[DenseMatrix[Int]](m).iterator
       }).reduce(_ + _)
       val c_word_sum:DenseVector[Int] = sum(c_word(::, *)).toDenseVector
-      val c_doc_d = DenseVector.zeros[Int](l_K)
+      val c_doc_d = DenseVector.zeros[Int](K)
 
       val ALPHA = .1
       val BETA = .1
-      val posterior_range = DenseVector((0 to l_K - 1).toArray)
-      val posterior = DenseVector.zeros[Double](l_K)
+      val posterior_range = DenseVector((0 to K - 1).toArray)
+      val posterior = DenseVector.zeros[Double](K)
       val new_grouped_documents_with_wt = grouped_documents_with_wt.mapPartitions(partition => {
         def find_k(p:Double, posterior:DenseVector[Double]): Int = {
           posterior_range.foreach(e => {
@@ -114,7 +115,7 @@ class LatentDirichletAllocation() extends Serializable {
               return e
             }
           })
-          return l_K - 1
+          return K - 1
         }
         partition.map(doc => {
           c_doc_d :*= 0
@@ -129,7 +130,7 @@ class LatentDirichletAllocation() extends Serializable {
             c_word(wt.word, wt.topic) -= 1
             var posterior_sum = 0.0
             posterior_range.foreach(k => {
-              posterior_sum += (ALPHA + c_doc_d(k)) * (c_word(wt.word, k) + BETA) / (l_V * BETA + c_word_sum(k))
+              posterior_sum += (ALPHA + c_doc_d(k)) * (c_word(wt.word, k) + BETA) / (V * BETA + c_word_sum(k))
               posterior(k) = posterior_sum
             })
             posterior :*= 1 / posterior_sum
@@ -148,8 +149,12 @@ class LatentDirichletAllocation() extends Serializable {
       grouped_documents_with_wt = new_grouped_documents_with_wt
     }
     //END LOOP HERE
-    var results = grouped_documents_with_wt.collect()
-    print_document_with_assignments(vocab, results)
+    val results = grouped_documents_with_wt.collect()
+    val topic_mixture = compute_topic_mixture(vocab, results)
+    for (e <- topic_mixture) {
+      println(e.toString())
+    }
+    val top_words = compute_top_words(vocab, results)
     spark_context.stop()
   }
 }
