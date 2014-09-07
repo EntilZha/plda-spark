@@ -21,19 +21,18 @@ object LatentDirichletAllocation {
   //val FILE = "/root/lda/data/data" + data_file_size.toString + "MB.txt"
   val ITERATIONS = 10
   val K = 4
-}
 
-class LatentDirichletAllocation() extends Serializable {
-  def generate_vocab_id_lookup(vocab:Array[String]) : Map[String, Int] = {
-    var vocab_lookup:Map[String, Int] = Map()
-    for (i <- 0 until vocab.length) {
-      vocab_lookup += (vocab(i) -> i)
-    }
-    return vocab_lookup
+  def seq_op(c_word:DenseMatrix[Int], wt:WordTopic) : DenseMatrix[Int] = {
+    c_word(wt.word, wt.topic) += 1
+    return c_word
+  }
+
+  def comb_op(m1:DenseMatrix[Int], m2:DenseMatrix[Int]) : DenseMatrix[Int] = {
+    return m1 + m2
   }
 
   // Compute a matrix holding the topic mixture for each document
-  def compute_topic_mixture(vocab:Array[String], docs:Array[(Int, Seq[WordTopic])]) : List[DenseVector[Int]] = {
+  def compute_topic_mixture(vocab:Array[String], docs:Array[(Int, Iterable[WordTopic])]) : List[DenseVector[Int]] = {
     val results = ListBuffer[DenseVector[Int]]()
     for (doc <- docs) {
       val v = DenseVector.zeros[Int](LatentDirichletAllocation.K)
@@ -46,11 +45,20 @@ class LatentDirichletAllocation() extends Serializable {
   }
 
   // Compute a matrix holding the top n words for each topic
-  def compute_top_words(vocab:Array[String], doc_words:Array[(Int, Seq[WordTopic])], n:Int=10) : List[DenseVector[Int]] = {
-    val results = ListBuffer
-    return null
+  def compute_top_words(doc_with_wts:RDD[(Int, Iterable[WordTopic])], V:Int, K:Int=LatentDirichletAllocation.K) : DenseMatrix[Int] = {
+    return doc_with_wts.flatMap(doc => doc._2).aggregate(
+        DenseMatrix.zeros[Int](V, K))(LatentDirichletAllocation.seq_op, LatentDirichletAllocation.comb_op)
   }
+}
 
+class LatentDirichletAllocation() extends Serializable {
+  def generate_vocab_id_lookup(vocab:Array[String]) : Map[String, Int] = {
+    var vocab_lookup:Map[String, Int] = Map()
+    for (i <- 0 until vocab.length) {
+      vocab_lookup += (vocab(i) -> i)
+    }
+    return vocab_lookup
+  }
 
   def run(data_file_size: Int, tasks: Int) {
     val K = LatentDirichletAllocation.K
@@ -150,11 +158,11 @@ class LatentDirichletAllocation() extends Serializable {
     }
     //END LOOP HERE
     val results = grouped_documents_with_wt.collect()
-    val topic_mixture = compute_topic_mixture(vocab, results)
+    val topic_mixture = LatentDirichletAllocation.compute_topic_mixture(vocab, results)
     for (e <- topic_mixture) {
       println(e.toString())
     }
-    val top_words = compute_top_words(vocab, results)
+    val top_words = LatentDirichletAllocation.compute_top_words(grouped_documents_with_wt, V)
     spark_context.stop()
   }
 }
