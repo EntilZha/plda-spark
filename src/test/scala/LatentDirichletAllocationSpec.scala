@@ -27,7 +27,7 @@ class LatentDirichletAllocationSpec extends FunSuite with Matchers {
       (0, Array(new WordTopic(1, 0)).toIterable), (0, Array(new WordTopic(2, 0)).toIterable),
       (0, Array(new WordTopic(1, 1)).toIterable), (0, Array(new WordTopic(2, 2)).toIterable)
     ))
-    val result = LatentDirichletAllocation.compute_top_words(data, 3, 3)
+    val result = LatentDirichletAllocation.compute_c_word(data, 3, 3)
     result.toString() should equal (DenseMatrix((2, 0, 0),
                                                 (1, 1, 0),
                                                 (1, 0, 1)).toString())

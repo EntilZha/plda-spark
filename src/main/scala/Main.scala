@@ -20,7 +20,7 @@ object Main {
       for( s <- sizes) {
         val lda = new LatentDirichletAllocation()
         start = System.currentTimeMillis()
-        lda.run(s, t)
+        lda.run(t)
         t_elapsed = (System.currentTimeMillis() - start)
         szs = szs :+ s
         tsks = tsks :+ t
