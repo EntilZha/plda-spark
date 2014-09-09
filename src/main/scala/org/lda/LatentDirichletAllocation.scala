@@ -7,10 +7,6 @@ import breeze.linalg._
 import scala.collection.mutable.ListBuffer
 import scala.util.Random
 import org.apache.log4j.{Level, Logger}
-import scala.io.Source
-import scala.collection.TraversableOnce
-import org.apache.spark.broadcast.Broadcast
-import org.apache.spark.storage.StorageLevel
 
 /**
  * LatentDirichletAllocation uses spark to perform LDA in parallel.

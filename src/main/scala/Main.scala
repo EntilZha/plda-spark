@@ -1,7 +1,5 @@
 import org.apache.log4j.{Level, Logger}
 import org.lda.LatentDirichletAllocation
-import scala.io.Source
-import java.io._
 
 object Main {
   def main(args: Array[String]) {

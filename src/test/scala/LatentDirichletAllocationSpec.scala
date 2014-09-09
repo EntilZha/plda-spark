@@ -1,7 +1,6 @@
 package org.lda
 
 import org.apache.spark.{SparkConf, SparkContext}
-import org.apache.spark.SparkContext._
 import breeze.linalg._
 import org.scalatest.FunSuite
 import org.scalatest.Matchers
