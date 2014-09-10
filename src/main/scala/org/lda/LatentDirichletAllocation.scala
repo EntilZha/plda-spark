@@ -70,22 +70,22 @@ object LatentDirichletAllocation {
   }
 
   /**
-   * compute_top_words finds the top n words of each topic and returns a list
-   * of lists. The inner list contain a sorted sequence of strings representing
-   * the most common words. The outer list indexes the different topics, where
-   * each list of words belongs to that topic.
+   * compute_top_words finds the top word of each topic and returns a list
+   * indexed by topic
+   * TODO: generalize to top n words
    * @param c_word matrix with rows indexing words and columns indexing topics
    * @param vocab array which acts as a lookup from the integer representation
    *              of a word to its original string representation
-   * @param n number of words to find per topic
-   * @return list indexed by topic containing sorted lists of top words.
+   * @return list indexed by topic containing the top words.
    */
-  def compute_top_words(c_word:DenseMatrix[Int], vocab:Array[String], n:Int) : List[List[String]] = {
-    return null
+  def compute_top_word(c_word:DenseMatrix[Int], vocab:Array[String], K:Int=LatentDirichletAllocation.K) : Array[(Int, String)] = {
+    val results:Array[(Int, String)] = new Array[(Int, String)](K)
+    for (i <- 0 until K) {
+      val best_word = argmax(c_word(::, i))
+      results(i) = (best_word, vocab(best_word))
+    }
+    return results
   }
-}
-
-class LatentDirichletAllocation() extends Serializable {
   /**
    * generate_vocab_id_lookup creates a mapping from the original word to the
    * integer id using the array lookup from int (index) to the original word
@@ -99,7 +99,9 @@ class LatentDirichletAllocation() extends Serializable {
     }
     return vocab_lookup
   }
+}
 
+class LatentDirichletAllocation() extends Serializable {
   /**
    * run starts the PLDA job.
    * @param tasks number of Spark tasks to use
@@ -118,7 +120,7 @@ class LatentDirichletAllocation() extends Serializable {
     val data = spark_context.textFile(LatentDirichletAllocation.FILE, tasks)
     //Run through all words to generate a vocab, vocab size, and vocab lookup
     val vocab = data.flatMap(line => line.split(" ")).distinct().collect()
-    val vocab_lookup = spark_context.broadcast(generate_vocab_id_lookup(vocab))
+    val vocab_lookup = spark_context.broadcast(LatentDirichletAllocation.generate_vocab_id_lookup(vocab))
     val V = vocab_lookup.value.size
 
     //Parse individual documents into (d0, List[WordTopic(word, random topic)])

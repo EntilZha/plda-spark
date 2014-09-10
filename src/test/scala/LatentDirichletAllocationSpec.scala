@@ -19,7 +19,7 @@ class LatentDirichletAllocationSpec extends FunSuite with Matchers {
     m = LatentDirichletAllocation.seq_op(m, wt)
     m.toString() should equal (DenseMatrix((1, 1), (1, 0)).toString())
   }
-  test("compute_top_words gives correct DenseMatrix given a RDD of Documents with WordTopics") {
+  test("compute_c_word gives correct DenseMatrix given a RDD of Documents with WordTopics") {
     val sc = new SparkContext("local", "test")
     val data = sc.parallelize(List(
       (0, Array(new WordTopic(0, 0)).toIterable), (0, Array(new WordTopic(0, 0)).toIterable),
@@ -30,5 +30,21 @@ class LatentDirichletAllocationSpec extends FunSuite with Matchers {
     result.toString() should equal (DenseMatrix((2, 0, 0),
                                                 (1, 1, 0),
                                                 (1, 0, 1)).toString())
+  }
+  test("compute_top_word correctly returns the top word for each topic") {
+    var c_word = DenseMatrix((2, 0, 0),
+                             (1, 1, 0),
+                             (1, 0, 1))
+    val K = 3
+    val vocab = Array("a", "b", "c")
+    var expected = Array((0, "a"), (1, "b"), (2, "c"))
+    var result = LatentDirichletAllocation.compute_top_word(c_word, vocab, K)
+    result should equal (expected)
+    c_word = DenseMatrix((0, 1, 2),
+                         (2, 1, 0),
+                         (1, 2, 0))
+    expected = Array((1, "b"), (2, "c"), (0, "a"))
+    result = LatentDirichletAllocation.compute_top_word(c_word, vocab, K)
+    result should equal (expected)
   }
 }
