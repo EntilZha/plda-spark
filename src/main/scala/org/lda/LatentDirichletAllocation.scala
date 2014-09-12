@@ -5,6 +5,7 @@ import org.apache.spark.SparkContext._
 import org.apache.spark.rdd.RDD
 import breeze.linalg._
 import scala.collection.mutable.ListBuffer
+import scala.io.Source
 import scala.util.Random
 import org.apache.log4j.{Level, Logger}
 
@@ -18,7 +19,7 @@ object LatentDirichletAllocation {
   val FILE = "/Users/pedro/Documents/Code/plda-spark/data/science.txt"
   //val MASTER = Source.fromFile("/root/spark-ec2/cluster-url").mkString.trim
   //val FILE = "/root/lda/data/data" + data_file_size.toString + "MB.txt"
-  val ITERATIONS = 10
+  val ITERATIONS = 100
   val K = 4
 
   /**
@@ -99,6 +100,11 @@ object LatentDirichletAllocation {
     }
     return vocab_lookup
   }
+
+  def common_words_filter() : (String => Boolean) = {
+    val common_words = Source.fromFile("data/top100words.txt").getLines.toSet[String]
+    return (word:String) => (!common_words.contains(word))
+  }
 }
 
 class LatentDirichletAllocation() extends Serializable {
@@ -121,11 +127,12 @@ class LatentDirichletAllocation() extends Serializable {
     //Run through all words to generate a vocab, vocab size, and vocab lookup
     val vocab = data.flatMap(line => line.split(" ")).distinct().collect()
     val vocab_lookup = spark_context.broadcast(LatentDirichletAllocation.generate_vocab_id_lookup(vocab))
+    val word_filter = spark_context.broadcast(LatentDirichletAllocation.common_words_filter())
     val V = vocab_lookup.value.size
 
     //Parse individual documents into (d0, List[WordTopic(word, random topic)])
     var grouped_documents_with_wt = data.flatMap({(line) =>
-      val words = line.split(" ")
+      val words = line.split(" ").filter(word_filter.value)
       words.map(w => {
         (line.hashCode(), new WordTopic(vocab_lookup.value(w), Random.nextInt(K)))
       })
@@ -209,6 +216,10 @@ class LatentDirichletAllocation() extends Serializable {
       println(e.toString())
     }
     val final_c_word = LatentDirichletAllocation.compute_c_word(grouped_documents_with_wt, V)
+    val top_words = LatentDirichletAllocation.compute_top_word(final_c_word, vocab)
+    for (e <- top_words) {
+      println(e)
+    }
     spark_context.stop()
   }
 }

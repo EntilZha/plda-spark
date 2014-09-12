@@ -47,4 +47,18 @@ class LatentDirichletAllocationSpec extends FunSuite with Matchers {
     result = LatentDirichletAllocation.compute_top_word(c_word, vocab, K)
     result should equal (expected)
   }
+  test("common_words_filter returns filter function") {
+    val filter = LatentDirichletAllocation.common_words_filter()
+    filter("a") should be (false)
+    filter("the") should be (false)
+    filter("that") should be (false)
+    filter("spark") should be (true)
+    val words = List("a", "the", "that", "spark", "pedro", "computer").filter(filter)
+    words.contains("a") should be (false)
+    words.contains("the") should be (false)
+    words.contains("that") should be (false)
+    words.contains("spark") should be (true)
+    words.contains("pedro") should be (true)
+    words.contains("computer") should be (true)
+  }
 }
